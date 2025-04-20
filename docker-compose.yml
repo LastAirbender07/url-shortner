@@ -35,9 +35,11 @@ services:
       - app_network
     environment:
       - NODE_ENV=production
+      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
     volumes:
           - ./url-shortener-frontend/.env.local:/app/.env.local
-
+    # entrypoint: ["sh", "-c", "chmod +x /app/start-ngrok.sh && /app/start-ngrok.sh"]
+    
   db:
     image: postgres:15-alpine
     container_name: url_shortener_db
