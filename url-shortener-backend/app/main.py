@@ -6,6 +6,7 @@ from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
 from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 
 from .database import SessionLocal, engine, Base
 from .models import URL
@@ -79,25 +80,27 @@ def health():
 
 @app.get("/{short_url}")
 async def redirect_url(short_url: str, db: Session = Depends(get_db)):
-    """Retrieve original URL from Redis (cache) or PostgreSQL (fallback)."""
+    """Redirect to the original URL from Redis (cache) or PostgreSQL (fallback)."""
 
-    # Try Redis first (handle Redis errors gracefully)
+    # Try Redis first
     try:
         cached_url = await app.state.redis.get(short_url)
         if cached_url:
-            return {"redirect_to": cached_url}
+            print("🔗 Redirecting (from Redis):", cached_url)
+            return RedirectResponse(url=cached_url, status_code=302)
     except Exception as e:
         print(f"⚠️ Redis cache retrieval error: {e}")
 
-    # If not found in cache, check PostgreSQL
+    # If not found in Redis, try PostgreSQL
     url_entry = get_long_url(db, short_url)
     if url_entry is None:
         raise HTTPException(status_code=404, detail="URL not found")
 
-    # Store in Redis for future requests (handle Redis failures gracefully)
+    # Cache in Redis
     try:
         await app.state.redis.set(short_url, url_entry.long_url)
     except Exception as e:
         print(f"⚠️ Redis cache update error: {e}")
 
-    return {"redirect_to": url_entry.long_url}
+    print("🔗 Redirecting (from DB):", url_entry.long_url)
+    return RedirectResponse(url=url_entry.long_url, status_code=302)
