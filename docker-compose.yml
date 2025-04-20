@@ -1,0 +1,75 @@
+services:
+  backend:
+    build: ./url-shortener-backend
+    container_name: url_shortener_backend
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}  # Ensure ngrok works
+    networks:
+      - app_network
+    volumes:
+      - ./url-shortener-frontend:/app/url-shortener-frontend 
+      - ./url-shortener-backend/start-ngrok.sh:/app/start-ngrok.sh  # Mount script
+    entrypoint: ["sh", "-c", "chmod +x /app/start-ngrok.sh && /bin/sh /app/start-ngrok.sh && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    build: ./url-shortener-frontend
+    container_name: url_shortener_frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy  # Ensure backend is ready before frontend starts
+    networks:
+      - app_network
+    environment:
+      - NODE_ENV=production
+    volumes:
+          - ./url-shortener-frontend/.env.local:/app/.env.local
+
+  db:
+    image: postgres:15-alpine
+    container_name: url_shortener_db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: url_shortener
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: url_shortener_redis
+    restart: always
+    networks:
+      - app_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  app_network:
+
+volumes:
+  postgres_data:
